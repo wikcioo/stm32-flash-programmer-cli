@@ -4,7 +4,10 @@ use std::io;
 use std::process::exit;
 
 const CMD_BL_GET_VER: u8 = 0xA1;
+const CMD_BL_GET_HELP: u8 = 0xA2;
+
 const CMD_BL_GET_VER_LEN: u8 = 6;
+const CMD_BL_GET_HELP_LEN: u8 = 6;
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -79,7 +82,23 @@ fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
                 .unwrap();
 
             process_bootloader_reply(data_buffer[1], port);
-        }
+        },
+        2 => {
+            data_buffer[0] = CMD_BL_GET_HELP_LEN - 1;
+            data_buffer[1] = CMD_BL_GET_HELP;
+
+            let data_upper_bound = (CMD_BL_GET_HELP_LEN - 4) as usize;
+            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
+            data_buffer[2] = u32_to_u8(crc32, 1);
+            data_buffer[3] = u32_to_u8(crc32, 2);
+            data_buffer[4] = u32_to_u8(crc32, 3);
+            data_buffer[5] = u32_to_u8(crc32, 4);
+            port.write_all(&data_buffer[0..1]).unwrap();
+            port.write_all(&data_buffer[1..(CMD_BL_GET_HELP_LEN as usize)])
+                .unwrap();
+
+            process_bootloader_reply(data_buffer[1], port);
+        },
         _ => println!("Unsupported command number reached!"),
     }
 }
@@ -110,6 +129,16 @@ fn process_cmd_bl_get_ver(_length: u8, mut port: Box<dyn SerialPort>) {
     println!("Bootloader version = 0x{:02X}", rcv_buffer[0]);
 }
 
+fn process_cmd_bl_get_help(length: u8, mut port: Box<dyn SerialPort>) {
+    let mut rcv_buffer = [0u8, length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+    print!("Bootloader available commands: ");
+    for cmd in rcv_buffer {
+        print!("0x{:02X} ", cmd);
+    }
+    println!();
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -124,6 +153,7 @@ fn choose_command() -> i32 {
 fn display_menu() {
     println!("Choose a bootloader action");
     println!("GET VERSION => 1");
+    println!("GET HELP    => 2");
 }
 
 fn get_available_serial_ports() -> Vec<String> {
