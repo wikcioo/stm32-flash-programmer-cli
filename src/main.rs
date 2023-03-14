@@ -68,10 +68,8 @@ fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
             data_buffer[0] = CMD_BL_GET_VER_LEN - 1;
             data_buffer[1] = CMD_BL_GET_VER;
 
-            // TODO: get crc to work
-            // let crc32: u32 = Crc::<u32>::new(&CRC_32_CKSUM).checksum(&data_buffer[0..(CMD_BL_GET_VER_LEN-4) as usize]);
-            // hardcoded value for this data only
-            let crc32 = 0xF51314EE;
+            let data_upper_bound = (CMD_BL_GET_VER_LEN - 4) as usize;
+            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
             data_buffer[2] = u32_to_u8(crc32, 1);
             data_buffer[3] = u32_to_u8(crc32, 2);
             data_buffer[4] = u32_to_u8(crc32, 3);
