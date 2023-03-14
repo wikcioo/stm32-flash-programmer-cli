@@ -44,6 +44,22 @@ fn u32_to_u8(number: u32, index: u32) -> u8 {
     (number >> (8 * (index - 1)) & 0xFF) as u8
 }
 
+fn get_crc(buff: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFFFFFF;
+    for data in buff {
+        crc = crc ^ (*data as u32);
+        for _ in 0..32 {
+            if crc & 0x80000000 != 0 {
+                crc = (crc << 1) ^ 0x04C11DB7;
+            } else {
+                crc = crc << 1;
+            }
+        }
+    }
+
+    crc
+}
+
 fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
     let mut data_buffer = [0u8; 255];
 
