@@ -27,6 +27,24 @@ fn main() {
     } else {
         println!("Bad device");
     }
+
+    let cmd_number = choose_command();
+}
+
+fn choose_command() -> i32 {
+    display_menu();
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
+    let cmd_number: i32 = input.trim().parse().expect("Invalid input");
+    cmd_number
+}
+
+fn display_menu() {
+    println!("Choose a bootloader action");
+    println!("GET VERSION => 1");
 }
 
 fn get_available_serial_ports() -> Vec<String> {
