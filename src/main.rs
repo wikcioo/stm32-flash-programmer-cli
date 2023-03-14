@@ -88,15 +88,18 @@ fn process_bootloader_reply(command: u8, mut port: Box<dyn SerialPort>) {
     let mut rcv_buffer = [0u8, 2];
     port.read_exact(&mut rcv_buffer).unwrap();
 
-    if rcv_buffer[1] == 0xBB {
-        let reply_length = rcv_buffer[0];
+    if rcv_buffer[0] == 0xBB {
+        let reply_length = rcv_buffer[1];
         match command {
             CMD_BL_GET_VER => {
                 process_cmd_bl_get_ver(reply_length, port);
+            },
+            CMD_BL_GET_HELP => {
+                process_cmd_bl_get_help(reply_length, port);
             }
             _ => println!("Unknown bootloader command"),
         }
-    } else if rcv_buffer[1] == 0xEE {
+    } else if rcv_buffer[0] == 0xEE {
         println!("CRC verification failed!");
     }
 }
