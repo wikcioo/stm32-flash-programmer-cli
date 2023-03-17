@@ -1,17 +1,19 @@
 use regex::Regex;
 use serialport::{available_ports, ClearBuffer, SerialPort};
-use std::io;
+use std::io::{self, Write};
 use std::process::exit;
 
 const CMD_BL_GET_VER: u8 = 0xA1;
 const CMD_BL_GET_HELP: u8 = 0xA2;
 const CMD_BL_GET_DEV_ID: u8 = 0xA3;
 const CMD_BL_GET_RDP_LEVEL: u8 = 0xA4;
+const CMD_BL_JMP_ADDR: u8 = 0xA5;
 
 const CMD_BL_GET_VER_LEN: u8 = 6;
 const CMD_BL_GET_HELP_LEN: u8 = 6;
 const CMD_BL_GET_DEV_ID_LEN: u8 = 6;
 const CMD_BL_GET_RDP_LEVEL_LEN: u8 = 6;
+const CMD_BL_JMP_ADDR_LEN: u8 = 10;
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -142,6 +144,36 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
             process_bootloader_reply(data_buffer[1], port);
         }
+        5 => {
+            data_buffer[0] = CMD_BL_JMP_ADDR_LEN - 1;
+            data_buffer[1] = CMD_BL_JMP_ADDR;
+
+            print!("Enter memory address to jump to in hex: ");
+            io::stdout().flush().unwrap();
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+            let input = input.trim().trim_start_matches("0x");
+
+            let address_decimal = u32::from_str_radix(input, 16).expect("Invalid hex number");
+            data_buffer[2] = u32_to_u8(address_decimal, 1);
+            data_buffer[3] = u32_to_u8(address_decimal, 2);
+            data_buffer[4] = u32_to_u8(address_decimal, 3);
+            data_buffer[5] = u32_to_u8(address_decimal, 4);
+
+            let data_upper_bound = (CMD_BL_JMP_ADDR_LEN - 4) as usize;
+            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
+            data_buffer[6] = u32_to_u8(crc32, 1);
+            data_buffer[7] = u32_to_u8(crc32, 2);
+            data_buffer[8] = u32_to_u8(crc32, 3);
+            data_buffer[9] = u32_to_u8(crc32, 4);
+            port.write_all(&data_buffer[0..1]).unwrap();
+            port.write_all(&data_buffer[1..(CMD_BL_JMP_ADDR_LEN as usize)])
+                .unwrap();
+
+            process_bootloader_reply(data_buffer[1], port);
+        }
         _ => println!("Unsupported command number reached!"),
     }
 }
@@ -164,6 +196,9 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             }
             CMD_BL_GET_RDP_LEVEL => {
                 process_cmd_bl_get_rdp_level(reply_length, port);
+            }
+            CMD_BL_JMP_ADDR => {
+                process_cmd_bl_jmp_addr(reply_length, port);
             }
             _ => println!("Unknown bootloader command"),
         }
@@ -203,6 +238,25 @@ fn process_cmd_bl_get_rdp_level(length: usize, port: &mut dyn SerialPort) {
     println!("Bootloader rdp level: 0x{:02X}", rcv_buffer[0]);
 }
 
+fn process_cmd_bl_jmp_addr(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    let result;
+    if rcv_buffer[0] == 0 {
+        result = "SUCCESS".to_string();
+    } else if rcv_buffer[0] == 1 {
+        result = "FAILURE".to_string();
+    } else {
+        result = "INVALID RESPONSE".to_string();
+    }
+
+    println!("Bootloader jump to address: {result}");
+    if result == "SUCCESS" {
+        exit(0);
+    }
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -220,6 +274,7 @@ fn display_menu() {
     println!("GET HELP    => 2");
     println!("GET DEV ID  => 3");
     println!("GET RDP LVL => 4");
+    println!("JUMP ADDR   => 5");
     println!("QUIT        => 0");
 }
 
