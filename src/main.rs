@@ -41,8 +41,13 @@ fn main() {
         .expect("Failed to open {serial_port_name}");
     port.set_timeout(std::time::Duration::from_secs(2)).unwrap();
 
-    let cmd_number = choose_command();
-    parse_command_number(cmd_number, port);
+    loop {
+        let cmd_number = choose_command();
+        if cmd_number == 0 {
+            break;
+        }
+        parse_command_number(cmd_number, port.as_mut());
+    }
 }
 
 fn u32_to_u8(number: u32, index: u32) -> u8 {
@@ -65,7 +70,7 @@ fn get_crc(buff: &[u8]) -> u32 {
     crc
 }
 
-fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
+fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
     let mut data_buffer = [0u8; 255];
 
     match number {
@@ -84,7 +89,7 @@ fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
                 .unwrap();
 
             process_bootloader_reply(data_buffer[1], port);
-        },
+        }
         2 => {
             data_buffer[0] = CMD_BL_GET_HELP_LEN - 1;
             data_buffer[1] = CMD_BL_GET_HELP;
@@ -100,7 +105,7 @@ fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
                 .unwrap();
 
             process_bootloader_reply(data_buffer[1], port);
-        },
+        }
         3 => {
             data_buffer[0] = CMD_BL_GET_DEV_ID_LEN - 1;
             data_buffer[1] = CMD_BL_GET_DEV_ID;
@@ -116,22 +121,21 @@ fn parse_command_number(number: i32, mut port: Box<dyn SerialPort>) {
                 .unwrap();
 
             process_bootloader_reply(data_buffer[1], port);
-
         }
         _ => println!("Unsupported command number reached!"),
     }
 }
 
-fn process_bootloader_reply(command: u8, mut port: Box<dyn SerialPort>) {
-    let mut rcv_buffer = [0u8, 2];
+fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; 2];
     port.read_exact(&mut rcv_buffer).unwrap();
 
     if rcv_buffer[0] == 0xBB {
-        let reply_length = rcv_buffer[1];
+        let reply_length = rcv_buffer[1] as usize;
         match command {
             CMD_BL_GET_VER => {
                 process_cmd_bl_get_ver(reply_length, port);
-            },
+            }
             CMD_BL_GET_HELP => {
                 process_cmd_bl_get_help(reply_length, port);
             }
@@ -142,17 +146,19 @@ fn process_bootloader_reply(command: u8, mut port: Box<dyn SerialPort>) {
         }
     } else if rcv_buffer[0] == 0xEE {
         println!("CRC verification failed!");
+    } else {
+        println!("Unknown reply!");
     }
 }
 
-fn process_cmd_bl_get_ver(_length: u8, mut port: Box<dyn SerialPort>) {
-    let mut rcv_buffer = [0u8, 1];
+fn process_cmd_bl_get_ver(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
     port.read_exact(&mut rcv_buffer).unwrap();
     println!("Bootloader version: 0x{:02X}", rcv_buffer[0]);
 }
 
-fn process_cmd_bl_get_help(length: u8, mut port: Box<dyn SerialPort>) {
-    let mut rcv_buffer = [0u8, length];
+fn process_cmd_bl_get_help(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
     port.read_exact(&mut rcv_buffer).unwrap();
     print!("Bootloader available commands: ");
     for cmd in rcv_buffer {
@@ -161,8 +167,8 @@ fn process_cmd_bl_get_help(length: u8, mut port: Box<dyn SerialPort>) {
     println!();
 }
 
-fn process_cmd_bl_get_dev_id(length: u8, mut port: Box<dyn SerialPort>) {
-    let mut rcv_buffer = [0u8, length];
+fn process_cmd_bl_get_dev_id(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
     port.read_exact(&mut rcv_buffer).unwrap();
     let dev_id: u16 = (rcv_buffer[1] as u16) << 8 | rcv_buffer[0] as u16;
     println!("Bootloader device id: 0x{:04X}", dev_id);
@@ -184,6 +190,7 @@ fn display_menu() {
     println!("GET VERSION => 1");
     println!("GET HELP    => 2");
     println!("GET DEV ID  => 3");
+    println!("QUIT        => 0");
 }
 
 fn get_available_serial_ports() -> Vec<String> {
