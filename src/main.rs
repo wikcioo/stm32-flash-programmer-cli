@@ -10,12 +10,14 @@ const CMD_BL_GET_HELP: u8 = 0xA2;
 const CMD_BL_GET_DEV_ID: u8 = 0xA3;
 const CMD_BL_GET_RDP_LEVEL: u8 = 0xA4;
 const CMD_BL_JMP_ADDR: u8 = 0xA5;
+const CMD_BL_FLASH_ERASE: u8 = 0xA6;
 
 const CMD_BL_GET_VER_LEN: u8 = 6;
 const CMD_BL_GET_HELP_LEN: u8 = 6;
 const CMD_BL_GET_DEV_ID_LEN: u8 = 6;
 const CMD_BL_GET_RDP_LEVEL_LEN: u8 = 6;
 const CMD_BL_JMP_ADDR_LEN: u8 = 10;
+const CMD_BL_FLASH_ERASE_LEN: u8 = 8;
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -137,6 +139,34 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[4] = u32_to_u8(address_decimal, 3);
             data_buffer[5] = u32_to_u8(address_decimal, 4);
         }
+        6 => {
+            data_buffer[0] = CMD_BL_FLASH_ERASE_LEN;
+            data_buffer[1] = CMD_BL_FLASH_ERASE;
+
+            let base_sector_number: u8 = get_user_input::<u8>(
+                "Enter the sector number you want to start erasing from (0 to 7): ",
+            );
+            if base_sector_number > 7 {
+                println!("Invalid sector number!");
+                return;
+            }
+
+            const NUM_OF_FLASH_SECTORS: u8 = 8;
+
+            let num_of_sectors_to_erase: u8 = get_user_input::<u8>(&format!(
+                "Enter the amount of sectors to erase starting from {base_sector_number} sector: "
+            ));
+
+            if num_of_sectors_to_erase > NUM_OF_FLASH_SECTORS - base_sector_number {
+                println!(
+                    "Can't erase {num_of_sectors_to_erase} sectors starting at {base_sector_number} sector!"
+                );
+                return;
+            }
+
+            data_buffer[2] = base_sector_number;
+            data_buffer[3] = num_of_sectors_to_erase;
+        }
         _ => {
             println!("Unsupported command number reached!");
             return;
@@ -184,6 +214,9 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             }
             CMD_BL_JMP_ADDR => {
                 process_cmd_bl_jmp_addr(reply_length, port);
+            }
+            CMD_BL_FLASH_ERASE => {
+                process_cmd_bl_flash_erase(reply_length, port);
             }
             _ => println!("Unknown bootloader command"),
         }
@@ -242,6 +275,22 @@ fn process_cmd_bl_jmp_addr(length: usize, port: &mut dyn SerialPort) {
     }
 }
 
+fn process_cmd_bl_flash_erase(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    let result;
+    if rcv_buffer[0] == 0 {
+        result = "SUCCESS".to_string();
+    } else if rcv_buffer[0] == 1 {
+        result = "FAILURE".to_string();
+    } else {
+        result = "INVALID RESPONSE".to_string();
+    }
+
+    println!("Bootloader flash erase: {result}");
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -260,6 +309,7 @@ fn display_menu() {
     println!("GET DEV ID  => 3");
     println!("GET RDP LVL => 4");
     println!("JUMP ADDR   => 5");
+    println!("FLASH ERASE => 6");
     println!("QUIT        => 0");
 }
 
