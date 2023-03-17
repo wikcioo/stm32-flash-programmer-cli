@@ -5,19 +5,35 @@ use std::io::{self, Write};
 use std::process::exit;
 use std::str::FromStr;
 
-const CMD_BL_GET_VER: u8 = 0xA1;
-const CMD_BL_GET_HELP: u8 = 0xA2;
-const CMD_BL_GET_DEV_ID: u8 = 0xA3;
-const CMD_BL_GET_RDP_LEVEL: u8 = 0xA4;
-const CMD_BL_JMP_ADDR: u8 = 0xA5;
-const CMD_BL_FLASH_ERASE: u8 = 0xA6;
+struct BootloaderCommand {
+    code: u8,
+    length: u8,
+}
 
-const CMD_BL_GET_VER_LEN: u8 = 6;
-const CMD_BL_GET_HELP_LEN: u8 = 6;
-const CMD_BL_GET_DEV_ID_LEN: u8 = 6;
-const CMD_BL_GET_RDP_LEVEL_LEN: u8 = 6;
-const CMD_BL_JMP_ADDR_LEN: u8 = 10;
-const CMD_BL_FLASH_ERASE_LEN: u8 = 8;
+const CMD_BL_GET_VER: BootloaderCommand = BootloaderCommand {
+    code: 0xA1,
+    length: 6,
+};
+const CMD_BL_GET_HELP: BootloaderCommand = BootloaderCommand {
+    code: 0xA2,
+    length: 6,
+};
+const CMD_BL_GET_DEV_ID: BootloaderCommand = BootloaderCommand {
+    code: 0xA3,
+    length: 6,
+};
+const CMD_BL_GET_RDP_LEVEL: BootloaderCommand = BootloaderCommand {
+    code: 0xA4,
+    length: 6,
+};
+const CMD_BL_JMP_ADDR: BootloaderCommand = BootloaderCommand {
+    code: 0xA5,
+    length: 10,
+};
+const CMD_BL_FLASH_ERASE: BootloaderCommand = BootloaderCommand {
+    code: 0xA6,
+    length: 8,
+};
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -106,24 +122,24 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
     match number {
         1 => {
-            data_buffer[0] = CMD_BL_GET_VER_LEN;
-            data_buffer[1] = CMD_BL_GET_VER;
+            data_buffer[0] = CMD_BL_GET_VER.length;
+            data_buffer[1] = CMD_BL_GET_VER.code;
         }
         2 => {
-            data_buffer[0] = CMD_BL_GET_HELP_LEN;
-            data_buffer[1] = CMD_BL_GET_HELP;
+            data_buffer[0] = CMD_BL_GET_HELP.length;
+            data_buffer[1] = CMD_BL_GET_HELP.code;
         }
         3 => {
-            data_buffer[0] = CMD_BL_GET_DEV_ID_LEN;
-            data_buffer[1] = CMD_BL_GET_DEV_ID;
+            data_buffer[0] = CMD_BL_GET_DEV_ID.length;
+            data_buffer[1] = CMD_BL_GET_DEV_ID.code;
         }
         4 => {
-            data_buffer[0] = CMD_BL_GET_RDP_LEVEL_LEN;
-            data_buffer[1] = CMD_BL_GET_RDP_LEVEL;
+            data_buffer[0] = CMD_BL_GET_RDP_LEVEL.length;
+            data_buffer[1] = CMD_BL_GET_RDP_LEVEL.code;
         }
         5 => {
-            data_buffer[0] = CMD_BL_JMP_ADDR_LEN;
-            data_buffer[1] = CMD_BL_JMP_ADDR;
+            data_buffer[0] = CMD_BL_JMP_ADDR.length;
+            data_buffer[1] = CMD_BL_JMP_ADDR.code;
 
             print!("Enter memory address to jump to in hex: ");
             io::stdout().flush().unwrap();
@@ -140,8 +156,8 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[5] = u32_to_u8(address_decimal, 4);
         }
         6 => {
-            data_buffer[0] = CMD_BL_FLASH_ERASE_LEN;
-            data_buffer[1] = CMD_BL_FLASH_ERASE;
+            data_buffer[0] = CMD_BL_FLASH_ERASE.length;
+            data_buffer[1] = CMD_BL_FLASH_ERASE.code;
 
             let base_sector_number: u8 = get_user_input::<u8>(
                 "Enter the sector number you want to start erasing from (0 to 7): ",
@@ -199,26 +215,20 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
 
     if rcv_buffer[0] == 0xBB {
         let reply_length = rcv_buffer[1] as usize;
-        match command {
-            CMD_BL_GET_VER => {
-                process_cmd_bl_get_ver(reply_length, port);
-            }
-            CMD_BL_GET_HELP => {
-                process_cmd_bl_get_help(reply_length, port);
-            }
-            CMD_BL_GET_DEV_ID => {
-                process_cmd_bl_get_dev_id(reply_length, port);
-            }
-            CMD_BL_GET_RDP_LEVEL => {
-                process_cmd_bl_get_rdp_level(reply_length, port);
-            }
-            CMD_BL_JMP_ADDR => {
-                process_cmd_bl_jmp_addr(reply_length, port);
-            }
-            CMD_BL_FLASH_ERASE => {
-                process_cmd_bl_flash_erase(reply_length, port);
-            }
-            _ => println!("Unknown bootloader command"),
+        if command == CMD_BL_GET_VER.code {
+            process_cmd_bl_get_ver(reply_length, port);
+        } else if command == CMD_BL_GET_HELP.code {
+            process_cmd_bl_get_help(reply_length, port);
+        } else if command == CMD_BL_GET_DEV_ID.code {
+            process_cmd_bl_get_dev_id(reply_length, port);
+        } else if command == CMD_BL_GET_RDP_LEVEL.code {
+            process_cmd_bl_get_rdp_level(reply_length, port);
+        } else if command == CMD_BL_JMP_ADDR.code {
+            process_cmd_bl_jmp_addr(reply_length, port);
+        } else if command == CMD_BL_FLASH_ERASE.code {
+            process_cmd_bl_flash_erase(reply_length, port);
+        } else {
+            println!("Unknown bootloader command");
         }
     } else if rcv_buffer[0] == 0xEE {
         println!("CRC verification failed!");
