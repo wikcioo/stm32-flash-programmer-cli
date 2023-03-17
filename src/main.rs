@@ -6,10 +6,12 @@ use std::process::exit;
 const CMD_BL_GET_VER: u8 = 0xA1;
 const CMD_BL_GET_HELP: u8 = 0xA2;
 const CMD_BL_GET_DEV_ID: u8 = 0xA3;
+const CMD_BL_GET_RDP_LEVEL: u8 = 0xA4;
 
 const CMD_BL_GET_VER_LEN: u8 = 6;
 const CMD_BL_GET_HELP_LEN: u8 = 6;
 const CMD_BL_GET_DEV_ID_LEN: u8 = 6;
+const CMD_BL_GET_RDP_LEVEL_LEN: u8 = 6;
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -124,6 +126,22 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
             process_bootloader_reply(data_buffer[1], port);
         }
+        4 => {
+            data_buffer[0] = CMD_BL_GET_RDP_LEVEL_LEN - 1;
+            data_buffer[1] = CMD_BL_GET_RDP_LEVEL;
+
+            let data_upper_bound = (CMD_BL_GET_RDP_LEVEL_LEN - 4) as usize;
+            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
+            data_buffer[2] = u32_to_u8(crc32, 1);
+            data_buffer[3] = u32_to_u8(crc32, 2);
+            data_buffer[4] = u32_to_u8(crc32, 3);
+            data_buffer[5] = u32_to_u8(crc32, 4);
+            port.write_all(&data_buffer[0..1]).unwrap();
+            port.write_all(&data_buffer[1..(CMD_BL_GET_RDP_LEVEL_LEN as usize)])
+                .unwrap();
+
+            process_bootloader_reply(data_buffer[1], port);
+        }
         _ => println!("Unsupported command number reached!"),
     }
 }
@@ -143,6 +161,9 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             }
             CMD_BL_GET_DEV_ID => {
                 process_cmd_bl_get_dev_id(reply_length, port);
+            }
+            CMD_BL_GET_RDP_LEVEL => {
+                process_cmd_bl_get_rdp_level(reply_length, port);
             }
             _ => println!("Unknown bootloader command"),
         }
@@ -176,6 +197,12 @@ fn process_cmd_bl_get_dev_id(length: usize, port: &mut dyn SerialPort) {
     println!("Bootloader device id: 0x{:04X}", dev_id);
 }
 
+fn process_cmd_bl_get_rdp_level(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+    println!("Bootloader rdp level: 0x{:02X}", rcv_buffer[0]);
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -192,6 +219,7 @@ fn display_menu() {
     println!("GET VERSION => 1");
     println!("GET HELP    => 2");
     println!("GET DEV ID  => 3");
+    println!("GET RDP LVL => 4");
     println!("QUIT        => 0");
 }
 
