@@ -76,76 +76,49 @@ fn get_crc(buff: &[u8]) -> u32 {
     crc
 }
 
+fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) {
+    let cmd_len = data[0];
+    let mut crc_buffer = [0u8; 4];
+    // calculate crc on bytes [0 to CMD_BL_X_LEN - 4)
+    // to properly calculate the crc, it expects the first byte to be
+    // the length to follow which means we need to subtract one because
+    // we don't count the length itself
+    data[0] -= 1;
+    let crc32 = get_crc(&data[0..(cmd_len - 4) as usize]);
+    crc_buffer[0] = u32_to_u8(crc32, 1);
+    crc_buffer[1] = u32_to_u8(crc32, 2);
+    crc_buffer[2] = u32_to_u8(crc32, 3);
+    crc_buffer[3] = u32_to_u8(crc32, 4);
+
+    // append crc_buffer to data
+    let data = [&data[0..(cmd_len - 4) as usize], &crc_buffer[..]].concat();
+
+    port.write_all(&data[0..1]).unwrap();
+    port.write_all(&data[1..((cmd_len) as usize)]).unwrap();
+}
+
 fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
     let mut data_buffer = [0u8; 255];
 
     match number {
         1 => {
-            data_buffer[0] = CMD_BL_GET_VER_LEN - 1;
+            data_buffer[0] = CMD_BL_GET_VER_LEN;
             data_buffer[1] = CMD_BL_GET_VER;
-
-            let data_upper_bound = (CMD_BL_GET_VER_LEN - 4) as usize;
-            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
-            data_buffer[2] = u32_to_u8(crc32, 1);
-            data_buffer[3] = u32_to_u8(crc32, 2);
-            data_buffer[4] = u32_to_u8(crc32, 3);
-            data_buffer[5] = u32_to_u8(crc32, 4);
-            port.write_all(&data_buffer[0..1]).unwrap();
-            port.write_all(&data_buffer[1..(CMD_BL_GET_VER_LEN as usize)])
-                .unwrap();
-
-            process_bootloader_reply(data_buffer[1], port);
         }
         2 => {
-            data_buffer[0] = CMD_BL_GET_HELP_LEN - 1;
+            data_buffer[0] = CMD_BL_GET_HELP_LEN;
             data_buffer[1] = CMD_BL_GET_HELP;
-
-            let data_upper_bound = (CMD_BL_GET_HELP_LEN - 4) as usize;
-            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
-            data_buffer[2] = u32_to_u8(crc32, 1);
-            data_buffer[3] = u32_to_u8(crc32, 2);
-            data_buffer[4] = u32_to_u8(crc32, 3);
-            data_buffer[5] = u32_to_u8(crc32, 4);
-            port.write_all(&data_buffer[0..1]).unwrap();
-            port.write_all(&data_buffer[1..(CMD_BL_GET_HELP_LEN as usize)])
-                .unwrap();
-
-            process_bootloader_reply(data_buffer[1], port);
         }
         3 => {
-            data_buffer[0] = CMD_BL_GET_DEV_ID_LEN - 1;
+            data_buffer[0] = CMD_BL_GET_DEV_ID_LEN;
             data_buffer[1] = CMD_BL_GET_DEV_ID;
-
-            let data_upper_bound = (CMD_BL_GET_DEV_ID_LEN - 4) as usize;
-            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
-            data_buffer[2] = u32_to_u8(crc32, 1);
-            data_buffer[3] = u32_to_u8(crc32, 2);
-            data_buffer[4] = u32_to_u8(crc32, 3);
-            data_buffer[5] = u32_to_u8(crc32, 4);
-            port.write_all(&data_buffer[0..1]).unwrap();
-            port.write_all(&data_buffer[1..(CMD_BL_GET_DEV_ID_LEN as usize)])
-                .unwrap();
-
-            process_bootloader_reply(data_buffer[1], port);
         }
         4 => {
-            data_buffer[0] = CMD_BL_GET_RDP_LEVEL_LEN - 1;
+            data_buffer[0] = CMD_BL_GET_RDP_LEVEL_LEN;
             data_buffer[1] = CMD_BL_GET_RDP_LEVEL;
-
-            let data_upper_bound = (CMD_BL_GET_RDP_LEVEL_LEN - 4) as usize;
-            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
-            data_buffer[2] = u32_to_u8(crc32, 1);
-            data_buffer[3] = u32_to_u8(crc32, 2);
-            data_buffer[4] = u32_to_u8(crc32, 3);
-            data_buffer[5] = u32_to_u8(crc32, 4);
-            port.write_all(&data_buffer[0..1]).unwrap();
-            port.write_all(&data_buffer[1..(CMD_BL_GET_RDP_LEVEL_LEN as usize)])
-                .unwrap();
-
-            process_bootloader_reply(data_buffer[1], port);
         }
         5 => {
-            data_buffer[0] = CMD_BL_JMP_ADDR_LEN - 1;
+            data_buffer[0] = CMD_BL_JMP_ADDR_LEN;
             data_buffer[1] = CMD_BL_JMP_ADDR;
 
             print!("Enter memory address to jump to in hex: ");
@@ -161,21 +134,15 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[3] = u32_to_u8(address_decimal, 2);
             data_buffer[4] = u32_to_u8(address_decimal, 3);
             data_buffer[5] = u32_to_u8(address_decimal, 4);
-
-            let data_upper_bound = (CMD_BL_JMP_ADDR_LEN - 4) as usize;
-            let crc32 = get_crc(&data_buffer[0..data_upper_bound]);
-            data_buffer[6] = u32_to_u8(crc32, 1);
-            data_buffer[7] = u32_to_u8(crc32, 2);
-            data_buffer[8] = u32_to_u8(crc32, 3);
-            data_buffer[9] = u32_to_u8(crc32, 4);
-            port.write_all(&data_buffer[0..1]).unwrap();
-            port.write_all(&data_buffer[1..(CMD_BL_JMP_ADDR_LEN as usize)])
-                .unwrap();
-
-            process_bootloader_reply(data_buffer[1], port);
         }
-        _ => println!("Unsupported command number reached!"),
+        _ => {
+            println!("Unsupported command number reached!");
+            return;
+        }
     }
+
+    calc_checksum_and_send(&mut data_buffer, port);
+    process_bootloader_reply(data_buffer[1], port);
 }
 
 fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
