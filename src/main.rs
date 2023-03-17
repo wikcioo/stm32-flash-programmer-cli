@@ -1,5 +1,5 @@
 use regex::Regex;
-use serialport::{available_ports, SerialPort};
+use serialport::{available_ports, ClearBuffer, SerialPort};
 use std::io;
 use std::process::exit;
 
@@ -40,6 +40,7 @@ fn main() {
         .open()
         .expect("Failed to open {serial_port_name}");
     port.set_timeout(std::time::Duration::from_secs(2)).unwrap();
+    port.clear(ClearBuffer::Input).unwrap();
 
     loop {
         let cmd_number = choose_command();
@@ -47,6 +48,7 @@ fn main() {
             break;
         }
         parse_command_number(cmd_number, port.as_mut());
+        port.clear(ClearBuffer::Input).unwrap();
     }
 }
 
