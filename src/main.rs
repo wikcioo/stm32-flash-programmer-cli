@@ -1,7 +1,9 @@
 use regex::Regex;
 use serialport::{available_ports, ClearBuffer, SerialPort};
+use std::fmt::Debug;
 use std::io::{self, Write};
 use std::process::exit;
+use std::str::FromStr;
 
 const CMD_BL_GET_VER: u8 = 0xA1;
 const CMD_BL_GET_HELP: u8 = 0xA2;
@@ -143,6 +145,22 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
     calc_checksum_and_send(&mut data_buffer, port);
     process_bootloader_reply(data_buffer[1], port);
+}
+
+fn get_user_input<T: FromStr>(prompt: &str) -> T
+where
+    <T as FromStr>::Err: Debug,
+{
+    print!("{prompt}");
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read input");
+
+    let input: T = input.trim().parse().expect("Invalid input");
+    input
 }
 
 fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
