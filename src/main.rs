@@ -34,6 +34,10 @@ const CMD_BL_FLASH_ERASE: BootloaderCommand = BootloaderCommand {
     code: 0xA6,
     length: 8,
 };
+const CMD_BL_MEM_READ: BootloaderCommand = BootloaderCommand {
+    code: 0xA8,
+    length: 11,
+};
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -183,6 +187,38 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[2] = base_sector_number;
             data_buffer[3] = num_of_sectors_to_erase;
         }
+        8 => {
+            data_buffer[0] = CMD_BL_MEM_READ.length;
+            data_buffer[1] = CMD_BL_MEM_READ.code;
+
+            let mut input = String::new();
+            print!("Enter memory address to start reading from (in hex): ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let input = input.trim().trim_start_matches("0x");
+            let base_address = u32::from_str_radix(input, 16).expect("Invalid hex number");
+
+            let mut input = String::new();
+
+            print!("Enter how many bytes to read: ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            // TODO: Allow for bigger memory reads than u8
+            let num_of_bytes_to_read: u8 = input.trim().parse().expect("Invalid input");
+
+            data_buffer[2] = u32_to_u8(base_address, 1);
+            data_buffer[3] = u32_to_u8(base_address, 2);
+            data_buffer[4] = u32_to_u8(base_address, 3);
+            data_buffer[5] = u32_to_u8(base_address, 4);
+
+            data_buffer[6] = num_of_bytes_to_read;
+        }
         _ => {
             println!("Unsupported command number reached!");
             return;
@@ -227,6 +263,8 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             process_cmd_bl_jmp_addr(reply_length, port);
         } else if command == CMD_BL_FLASH_ERASE.code {
             process_cmd_bl_flash_erase(reply_length, port);
+        } else if command == CMD_BL_MEM_READ.code {
+            process_cmd_bl_mem_read(reply_length, port);
         } else {
             println!("Unknown bootloader command");
         }
@@ -301,6 +339,24 @@ fn process_cmd_bl_flash_erase(length: usize, port: &mut dyn SerialPort) {
     println!("Bootloader flash erase: {result}");
 }
 
+fn process_cmd_bl_mem_read(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    if rcv_buffer[0] == 1 {
+        println!("Bootloader memory read: SUCCESS");
+        println!("Memory content: ");
+        for byte in rcv_buffer[1..].iter() {
+            print!("0x{:02X} ", byte);
+        }
+        println!();
+    } else if rcv_buffer[0] == 0 {
+        println!("Bootloader memory read: FAILURE");
+    } else {
+        println!("Bootloader memory read: INVALID RESPONSE");
+    }
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -320,6 +376,7 @@ fn display_menu() {
     println!("GET RDP LVL => 4");
     println!("JUMP ADDR   => 5");
     println!("FLASH ERASE => 6");
+    println!("MEM READ    => 8");
     println!("QUIT        => 0");
 }
 
