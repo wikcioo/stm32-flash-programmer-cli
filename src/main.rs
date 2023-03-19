@@ -38,6 +38,10 @@ const CMD_BL_MEM_READ: BootloaderCommand = BootloaderCommand {
     code: 0xA8,
     length: 11,
 };
+const CMD_BL_SET_RW_PROTECT: BootloaderCommand = BootloaderCommand {
+    code: 0xA9,
+    length: 8,
+};
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -219,6 +223,41 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
             data_buffer[6] = num_of_bytes_to_read;
         }
+        9 => {
+            data_buffer[0] = CMD_BL_SET_RW_PROTECT.length;
+            data_buffer[1] = CMD_BL_SET_RW_PROTECT.code;
+
+            let mut input = String::new();
+            println!(
+                "Enter which sectors you want to set protection (0 to 7) separated by space: "
+            );
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let sector_numbers: Vec<&str> = input.trim().split(' ').collect();
+            let sector_numbers: Vec<u8> =
+                sector_numbers.iter().map(|x| x.parse().unwrap()).collect();
+            let mut sectors = 0u8;
+
+            for num in sector_numbers {
+                if num > 7 {
+                    println!("Incorrect sector values!");
+                    return;
+                }
+                sectors |= 1 << (num);
+            }
+
+            let prot_level = get_user_input::<u8>("Enter 1 for write or 2 for read/write: ");
+            if prot_level < 1 || prot_level > 2 {
+                println!("Incorrect protection level value!");
+                return;
+            }
+
+            data_buffer[2] = sectors;
+            data_buffer[3] = prot_level;
+        }
         _ => {
             println!("Unsupported command number reached!");
             return;
@@ -265,6 +304,8 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             process_cmd_bl_flash_erase(reply_length, port);
         } else if command == CMD_BL_MEM_READ.code {
             process_cmd_bl_mem_read(reply_length, port);
+        } else if command == CMD_BL_SET_RW_PROTECT.code {
+            process_cmd_bl_set_rw_protect(reply_length, port);
         } else {
             println!("Unknown bootloader command");
         }
@@ -357,6 +398,22 @@ fn process_cmd_bl_mem_read(length: usize, port: &mut dyn SerialPort) {
     }
 }
 
+fn process_cmd_bl_set_rw_protect(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    let result;
+    if rcv_buffer[0] == 1 {
+        result = "SUCCESS".to_string();
+    } else if rcv_buffer[0] == 1 {
+        result = "FAILURE".to_string();
+    } else {
+        result = "INVALID RESPONSE".to_string();
+    }
+
+    println!("Bootloader set r/w protection: {result}");
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -377,6 +434,7 @@ fn display_menu() {
     println!("JUMP ADDR   => 5");
     println!("FLASH ERASE => 6");
     println!("MEM READ    => 8");
+    println!("SET RW PROT => 9");
     println!("QUIT        => 0");
 }
 
