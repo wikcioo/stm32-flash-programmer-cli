@@ -415,7 +415,7 @@ fn process_cmd_bl_set_rw_protect(length: usize, port: &mut dyn SerialPort) {
     let result;
     if rcv_buffer[0] == 1 {
         result = "SUCCESS".to_string();
-    } else if rcv_buffer[0] == 1 {
+    } else if rcv_buffer[0] == 0 {
         result = "FAILURE".to_string();
     } else {
         result = "INVALID RESPONSE".to_string();
