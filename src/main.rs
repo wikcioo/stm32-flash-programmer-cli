@@ -50,7 +50,7 @@ const CMD_BL_GET_RW_PROTECT: BootloaderCommand = BootloaderCommand {
 fn main() {
     let serial_devices = get_available_serial_ports();
 
-    if serial_devices.len() == 0 {
+    if serial_devices.is_empty() {
         println!("No available serial devices!");
         exit(0);
     }
@@ -95,12 +95,12 @@ fn u32_to_u8(number: u32, index: u32) -> u8 {
 fn get_crc(buff: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFFFFFF;
     for data in buff {
-        crc = crc ^ (*data as u32);
+        crc ^= *data as u32;
         for _ in 0..32 {
             if crc & 0x80000000 != 0 {
                 crc = (crc << 1) ^ 0x04C11DB7;
             } else {
-                crc = crc << 1;
+                crc <<= 1;
             }
         }
     }
@@ -254,7 +254,7 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             }
 
             let prot_level = get_user_input::<u8>("Enter 1 for write or 2 for read/write: ");
-            if prot_level < 1 || prot_level > 2 {
+            if !(1..=2).contains(&prot_level) {
                 println!("Incorrect protection level value!");
                 return;
             }
@@ -337,7 +337,7 @@ fn process_cmd_bl_get_help(length: usize, port: &mut dyn SerialPort) {
     port.read_exact(&mut rcv_buffer).unwrap();
     print!("Bootloader available commands: ");
     for cmd in rcv_buffer {
-        print!("0x{:02X} ", cmd);
+        print!("0x{cmd:02X} ");
     }
     println!();
 }
@@ -346,7 +346,7 @@ fn process_cmd_bl_get_dev_id(length: usize, port: &mut dyn SerialPort) {
     let mut rcv_buffer = vec![0u8; length];
     port.read_exact(&mut rcv_buffer).unwrap();
     let dev_id: u16 = (rcv_buffer[1] as u16) << 8 | rcv_buffer[0] as u16;
-    println!("Bootloader device id: 0x{:04X}", dev_id);
+    println!("Bootloader device id: 0x{dev_id:04X}");
 }
 
 fn process_cmd_bl_get_rdp_level(length: usize, port: &mut dyn SerialPort) {
@@ -398,7 +398,7 @@ fn process_cmd_bl_mem_read(length: usize, port: &mut dyn SerialPort) {
         println!("Bootloader memory read: SUCCESS");
         println!("Memory content: ");
         for byte in rcv_buffer[1..].iter() {
-            print!("0x{:02X} ", byte);
+            print!("0x{byte:02X} ");
         }
         println!();
     } else if rcv_buffer[0] == 0 {
