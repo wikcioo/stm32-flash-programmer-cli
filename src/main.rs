@@ -42,6 +42,10 @@ const CMD_BL_SET_RW_PROTECT: BootloaderCommand = BootloaderCommand {
     code: 0xA9,
     length: 8,
 };
+const CMD_BL_GET_RW_PROTECT: BootloaderCommand = BootloaderCommand {
+    code: 0xAA,
+    length: 6,
+};
 
 fn main() {
     let serial_devices = get_available_serial_ports();
@@ -258,6 +262,10 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[2] = sectors;
             data_buffer[3] = prot_level;
         }
+        10 => {
+            data_buffer[0] = CMD_BL_GET_RW_PROTECT.length;
+            data_buffer[1] = CMD_BL_GET_RW_PROTECT.code;
+        }
         _ => {
             println!("Unsupported command number reached!");
             return;
@@ -306,6 +314,8 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             process_cmd_bl_mem_read(reply_length, port);
         } else if command == CMD_BL_SET_RW_PROTECT.code {
             process_cmd_bl_set_rw_protect(reply_length, port);
+        } else if command == CMD_BL_GET_RW_PROTECT.code {
+            process_cmd_bl_get_rw_protect(reply_length, port);
         } else {
             println!("Unknown bootloader command");
         }
@@ -414,6 +424,27 @@ fn process_cmd_bl_set_rw_protect(length: usize, port: &mut dyn SerialPort) {
     println!("Bootloader set r/w protection: {result}");
 }
 
+fn process_cmd_bl_get_rw_protect(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    println!("Bootloader get r/w protection: ");
+    for (index, prot_level) in rcv_buffer.iter().enumerate() {
+        let protection;
+        if *prot_level == 0 {
+            protection = "No protection";
+        } else if *prot_level == 1 {
+            protection = "Write protection";
+        } else if *prot_level == 2 {
+            protection = "Read and Write protection";
+        } else {
+            protection = "Unknown";
+        }
+
+        println!("sector nr {index}: {protection}");
+    }
+}
+
 fn choose_command() -> i32 {
     display_menu();
 
@@ -435,6 +466,7 @@ fn display_menu() {
     println!("FLASH ERASE => 6");
     println!("MEM READ    => 8");
     println!("SET RW PROT => 9");
+    println!("GET RW PROT => 10");
     println!("QUIT        => 0");
 }
 
