@@ -9,7 +9,7 @@ A command-line program that runs on the host PC to communicate with [this](https
 - [x] BL_GET_RDP_LEVEL
 - [x] BL_JMP_ADDR
 - [x] BL_FLASH_ERASE
-- [ ] BL_MEM_WRITE
+- [x] BL_MEM_WRITE
 - [x] BL_MEM_READ
 - [x] BL_SET_RW_PROTECT
 - [x] BL_GET_RW_PROTECT
