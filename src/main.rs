@@ -84,6 +84,7 @@ fn main() {
     port.set_timeout(std::time::Duration::from_secs(2)).unwrap();
     port.clear(ClearBuffer::Input).unwrap();
 
+    display_program_name();
     display_available_commands();
     loop {
         let cmd = choose_command();
@@ -540,6 +541,12 @@ fn choose_command() -> String {
         .expect("Failed to read line");
 
     input.trim().to_string()
+}
+
+fn display_program_name() {
+    println!("#######################################");
+    println!("#  STM32 FLASH PROGRAMMER CLI V0.1.0  #");
+    println!("#######################################\n");
 }
 
 fn display_available_commands() {
