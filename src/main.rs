@@ -76,6 +76,7 @@ fn main() {
     } else {
         println!("Bad device");
     }
+    println!();
 
     let mut port = serialport::new(serial_port_name, 115200)
         .open()
@@ -83,12 +84,10 @@ fn main() {
     port.set_timeout(std::time::Duration::from_secs(2)).unwrap();
     port.clear(ClearBuffer::Input).unwrap();
 
+    display_available_commands();
     loop {
-        let cmd_number = choose_command();
-        if cmd_number == 0 {
-            break;
-        }
-        parse_command_number(cmd_number, port.as_mut());
+        let cmd = choose_command();
+        parse_command(&cmd, port.as_mut());
         port.clear(ClearBuffer::Input).unwrap();
     }
 }
@@ -134,27 +133,31 @@ fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) {
     port.write_all(&data[1..((cmd_len) as usize)]).unwrap();
 }
 
-fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
+fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
     let mut data_buffer = vec![0u8; 255];
 
-    match number {
-        1 => {
+    match cmd {
+        "menu" => {
+            display_available_commands();
+            return;
+        }
+        "version" => {
             data_buffer[0] = CMD_BL_GET_VER.length;
             data_buffer[1] = CMD_BL_GET_VER.code;
         }
-        2 => {
+        "commands" => {
             data_buffer[0] = CMD_BL_GET_HELP.length;
             data_buffer[1] = CMD_BL_GET_HELP.code;
         }
-        3 => {
+        "dev_id" => {
             data_buffer[0] = CMD_BL_GET_DEV_ID.length;
             data_buffer[1] = CMD_BL_GET_DEV_ID.code;
         }
-        4 => {
+        "rdp" => {
             data_buffer[0] = CMD_BL_GET_RDP_LEVEL.length;
             data_buffer[1] = CMD_BL_GET_RDP_LEVEL.code;
         }
-        5 => {
+        "jmp" => {
             data_buffer[0] = CMD_BL_JMP_ADDR.length;
             data_buffer[1] = CMD_BL_JMP_ADDR.code;
 
@@ -172,7 +175,7 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[4] = u32_to_u8(address_decimal, 3);
             data_buffer[5] = u32_to_u8(address_decimal, 4);
         }
-        6 => {
+        "erase" => {
             data_buffer[0] = CMD_BL_FLASH_ERASE.length;
             data_buffer[1] = CMD_BL_FLASH_ERASE.code;
 
@@ -200,7 +203,7 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[2] = base_sector_number;
             data_buffer[3] = num_of_sectors_to_erase;
         }
-        7 => {
+        "write" => {
             data_buffer[1] = CMD_BL_MEM_WRITE.code;
 
             let mut input = String::new();
@@ -257,7 +260,7 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             }
             return;
         }
-        8 => {
+        "read" => {
             data_buffer[0] = CMD_BL_MEM_READ.length;
             data_buffer[1] = CMD_BL_MEM_READ.code;
 
@@ -289,7 +292,7 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
             data_buffer[6] = num_of_bytes_to_read;
         }
-        9 => {
+        "set_prot" => {
             data_buffer[0] = CMD_BL_SET_RW_PROTECT.length;
             data_buffer[1] = CMD_BL_SET_RW_PROTECT.code;
 
@@ -324,12 +327,18 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
             data_buffer[2] = sectors;
             data_buffer[3] = prot_level;
         }
-        10 => {
+        "get_prot" => {
             data_buffer[0] = CMD_BL_GET_RW_PROTECT.length;
             data_buffer[1] = CMD_BL_GET_RW_PROTECT.code;
         }
+        "quit" => {
+            exit(0);
+        }
+        "" => {
+            return;
+        }
         _ => {
-            println!("Unsupported command number reached!");
+            println!("Command '{cmd}' is not supported!");
             return;
         }
     }
@@ -522,30 +531,31 @@ fn process_cmd_bl_get_rw_protect(length: usize, port: &mut dyn SerialPort) {
     }
 }
 
-fn choose_command() -> i32 {
-    display_menu();
-
+fn choose_command() -> String {
     let mut input = String::new();
+    print!(">>> ");
+    io::stdout().flush().unwrap();
     io::stdin()
         .read_line(&mut input)
         .expect("Failed to read line");
-    let cmd_number: i32 = input.trim().parse().expect("Invalid input");
-    cmd_number
+
+    input.trim().to_string()
 }
 
-fn display_menu() {
-    println!("Choose a bootloader action");
-    println!("GET VERSION => 1");
-    println!("GET HELP    => 2");
-    println!("GET DEV ID  => 3");
-    println!("GET RDP LVL => 4");
-    println!("JUMP ADDR   => 5");
-    println!("FLASH ERASE => 6");
-    println!("MEM WRITE   => 7");
-    println!("MEM READ    => 8");
-    println!("SET RW PROT => 9");
-    println!("GET RW PROT => 10");
-    println!("QUIT        => 0");
+fn display_available_commands() {
+    println!("Available commands:");
+    println!("menu");
+    println!("version");
+    println!("commands");
+    println!("dev_id");
+    println!("rdp");
+    println!("jmp");
+    println!("erase");
+    println!("write");
+    println!("read");
+    println!("set_prot");
+    println!("get_prot");
+    println!("quit");
 }
 
 fn get_available_serial_ports() -> Vec<String> {
