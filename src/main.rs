@@ -1,6 +1,7 @@
 use regex::Regex;
 use serialport::{available_ports, ClearBuffer, SerialPort};
 use std::fmt::Debug;
+use std::fs::read;
 use std::io::{self, Write};
 use std::process::exit;
 use std::str::FromStr;
@@ -33,6 +34,10 @@ const CMD_BL_JMP_ADDR: BootloaderCommand = BootloaderCommand {
 const CMD_BL_FLASH_ERASE: BootloaderCommand = BootloaderCommand {
     code: 0xA6,
     length: 8,
+};
+const CMD_BL_MEM_WRITE: BootloaderCommand = BootloaderCommand {
+    code: 0xA7,
+    length: 11,
 };
 const CMD_BL_MEM_READ: BootloaderCommand = BootloaderCommand {
     code: 0xA8,
@@ -130,7 +135,7 @@ fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) {
 }
 
 fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
-    let mut data_buffer = [0u8; 255];
+    let mut data_buffer = vec![0u8; 255];
 
     match number {
         1 => {
@@ -194,6 +199,63 @@ fn parse_command_number(number: i32, port: &mut dyn SerialPort) {
 
             data_buffer[2] = base_sector_number;
             data_buffer[3] = num_of_sectors_to_erase;
+        }
+        7 => {
+            data_buffer[1] = CMD_BL_MEM_WRITE.code;
+
+            let mut input = String::new();
+            print!("Enter filename: ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let filename = input.trim();
+
+            let mut input = String::new();
+            print!("Enter memory address at which to start writing: ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let input = input.trim().trim_start_matches("0x");
+            let base_address = u32::from_str_radix(input, 16).expect("Invalid hex number");
+
+            let mut bytes: Vec<u8> = read(filename).unwrap();
+
+            let mut no_bytes_left_to_read = bytes.len();
+            let single_byte_write_no: u8 = 128;
+            let mut no_bytes_sent = 0;
+
+            while no_bytes_left_to_read > 0 {
+                let no_bytes_to_be_send = if no_bytes_left_to_read >= single_byte_write_no as usize
+                {
+                    single_byte_write_no
+                } else {
+                    no_bytes_left_to_read as u8
+                };
+
+                data_buffer[0] = CMD_BL_MEM_WRITE.length + no_bytes_to_be_send;
+                data_buffer[2] = u32_to_u8(base_address + no_bytes_sent, 1);
+                data_buffer[3] = u32_to_u8(base_address + no_bytes_sent, 2);
+                data_buffer[4] = u32_to_u8(base_address + no_bytes_sent, 3);
+                data_buffer[5] = u32_to_u8(base_address + no_bytes_sent, 4);
+
+                data_buffer[6] = no_bytes_to_be_send;
+
+                data_buffer[7..(no_bytes_to_be_send as usize + 7)]
+                    .copy_from_slice(&bytes[..(no_bytes_to_be_send as usize)]);
+
+                bytes = bytes[no_bytes_to_be_send as usize..].to_vec();
+
+                calc_checksum_and_send(&mut data_buffer, port);
+                process_bootloader_reply(data_buffer[1], port);
+
+                no_bytes_sent += no_bytes_to_be_send as u32;
+                no_bytes_left_to_read -= no_bytes_to_be_send as usize;
+            }
+            return;
         }
         8 => {
             data_buffer[0] = CMD_BL_MEM_READ.length;
@@ -310,6 +372,8 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
             process_cmd_bl_jmp_addr(reply_length, port);
         } else if command == CMD_BL_FLASH_ERASE.code {
             process_cmd_bl_flash_erase(reply_length, port);
+        } else if command == CMD_BL_MEM_WRITE.code {
+            process_cmd_bl_mem_write(reply_length, port);
         } else if command == CMD_BL_MEM_READ.code {
             process_cmd_bl_mem_read(reply_length, port);
         } else if command == CMD_BL_SET_RW_PROTECT.code {
@@ -390,6 +454,19 @@ fn process_cmd_bl_flash_erase(length: usize, port: &mut dyn SerialPort) {
     println!("Bootloader flash erase: {result}");
 }
 
+fn process_cmd_bl_mem_write(length: usize, port: &mut dyn SerialPort) {
+    let mut rcv_buffer = vec![0u8; length];
+    port.read_exact(&mut rcv_buffer).unwrap();
+
+    if rcv_buffer[0] == 1 {
+        println!("Bootloader memory write: SUCCESS");
+    } else if rcv_buffer[0] == 0 {
+        println!("Bootloader memory write: FAILURE");
+    } else {
+        println!("Bootloader memory write: INVALID RESPONSE");
+    }
+}
+
 fn process_cmd_bl_mem_read(length: usize, port: &mut dyn SerialPort) {
     let mut rcv_buffer = vec![0u8; length];
     port.read_exact(&mut rcv_buffer).unwrap();
@@ -464,6 +541,7 @@ fn display_menu() {
     println!("GET RDP LVL => 4");
     println!("JUMP ADDR   => 5");
     println!("FLASH ERASE => 6");
+    println!("MEM WRITE   => 7");
     println!("MEM READ    => 8");
     println!("SET RW PROT => 9");
     println!("GET RW PROT => 10");
