@@ -1,10 +1,8 @@
 use regex::Regex;
 use serialport::{available_ports, ClearBuffer, SerialPort};
-use std::fmt::Debug;
 use std::fs::read;
 use std::io::{self, Write};
 use std::process::exit;
-use std::str::FromStr;
 
 struct BootloaderCommand {
     code: u8,
@@ -206,9 +204,15 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
             data_buffer[0] = CMD_BL_FLASH_ERASE.length;
             data_buffer[1] = CMD_BL_FLASH_ERASE.code;
 
-            let base_sector_number: u8 = get_user_input::<u8>(
-                "Enter the sector number you want to start erasing from (0 to 7): ",
-            );
+            let mut input = String::new();
+            print!("Enter the sector number you want to start erasing from (0 to 7): ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let base_sector_number = input.trim().parse().expect("Invalid input");
+
             if base_sector_number > 7 {
                 println!("Invalid sector number!");
                 return;
@@ -216,9 +220,16 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
 
             const NUM_OF_FLASH_SECTORS: u8 = 8;
 
-            let num_of_sectors_to_erase: u8 = get_user_input::<u8>(&format!(
+            let mut input = String::new();
+            print!(
                 "Enter the amount of sectors to erase starting from {base_sector_number} sector: "
-            ));
+            );
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let num_of_sectors_to_erase = input.trim().parse().expect("Invalid input");
 
             if num_of_sectors_to_erase > NUM_OF_FLASH_SECTORS - base_sector_number {
                 println!(
@@ -345,7 +356,15 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 sectors |= 1 << (num);
             }
 
-            let prot_level = get_user_input::<u8>("Enter 1 for write or 2 for read/write: ");
+            let mut input = String::new();
+            println!("Enter 1 for write or 2 for read/write: ");
+            io::stdout().flush().unwrap();
+            io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read input");
+
+            let prot_level = input.trim().parse().expect("Invalid input");
+
             if !(1..=2).contains(&prot_level) {
                 println!("Incorrect protection level value!");
                 return;
@@ -372,22 +391,6 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
 
     calc_checksum_and_send(&mut data_buffer, port);
     process_bootloader_reply(data_buffer[1], port);
-}
-
-fn get_user_input<T: FromStr>(prompt: &str) -> T
-where
-    <T as FromStr>::Err: Debug,
-{
-    print!("{prompt}");
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read input");
-
-    let input: T = input.trim().parse().expect("Invalid input");
-    input
 }
 
 fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
