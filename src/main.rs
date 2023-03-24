@@ -89,8 +89,7 @@ fn start_program() {
 
         let serial_port_name = serial_port_name.trim().to_string();
 
-        port = match serialport::new(&serial_port_name, 115200).open()
-        {
+        port = match serialport::new(&serial_port_name, 115200).open() {
             Ok(p) => p,
             Err(error) => {
                 eprintln!("Failed to open {serial_port_name}: {}", error.description);
@@ -190,13 +189,18 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
             io::stdin()
                 .read_line(&mut input)
                 .expect("Failed to read input");
-            let input = input.trim().trim_start_matches("0x");
+            let lowercase_input = input.to_lowercase();
+            let input = lowercase_input.trim().trim_start_matches("0x");
 
-            let address_decimal = u32::from_str_radix(input, 16).expect("Invalid hex number");
-            data_buffer[2] = u32_to_u8(address_decimal, 1);
-            data_buffer[3] = u32_to_u8(address_decimal, 2);
-            data_buffer[4] = u32_to_u8(address_decimal, 3);
-            data_buffer[5] = u32_to_u8(address_decimal, 4);
+            if let Ok(address_decimal) = u32::from_str_radix(input, 16) {
+                data_buffer[2] = u32_to_u8(address_decimal, 1);
+                data_buffer[3] = u32_to_u8(address_decimal, 2);
+                data_buffer[4] = u32_to_u8(address_decimal, 3);
+                data_buffer[5] = u32_to_u8(address_decimal, 4);
+            } else {
+                eprintln!("Invalid hex address!");
+                return;
+            }
         }
         "erase" => {
             data_buffer[0] = CMD_BL_FLASH_ERASE.length;
