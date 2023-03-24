@@ -211,10 +211,16 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let base_sector_number = input.trim().parse().expect("Invalid input");
+            let base_sector_number = match input.trim().parse() {
+                Ok(number) => number,
+                Err(_) => {
+                    eprintln!("Invalid input!");
+                    return;
+                }
+            };
 
-            if base_sector_number > 7 {
-                println!("Invalid sector number!");
+            if !(0..=7).contains(&base_sector_number) {
+                eprintln!("Invalid sector number!");
                 return;
             }
 
@@ -229,10 +235,16 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let num_of_sectors_to_erase = input.trim().parse().expect("Invalid input");
+            let num_of_sectors_to_erase = match input.trim().parse() {
+                Ok(number) => number,
+                Err(_) => {
+                    eprintln!("Invalid input!");
+                    return;
+                }
+            };
 
             if num_of_sectors_to_erase > NUM_OF_FLASH_SECTORS - base_sector_number {
-                println!(
+                eprintln!(
                     "Can't erase {num_of_sectors_to_erase} sectors starting at {base_sector_number} sector!"
                 );
                 return;
