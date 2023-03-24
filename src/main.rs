@@ -344,8 +344,21 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let input = input.trim().trim_start_matches("0x");
-            let base_address = u32::from_str_radix(input, 16).expect("Invalid hex number");
+            let input_lowercase = input.to_lowercase();
+            let input = input_lowercase.trim().trim_start_matches("0x");
+
+            let base_address = match u32::from_str_radix(input, 16) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    eprintln!("Invalid hex address!");
+                    return;
+                }
+            };
+
+            if !is_flash_mem_address(&base_address) {
+                eprintln!("Memory address outside of FLASH memory bounds!");
+                return;
+            }
 
             let mut input = String::new();
 
@@ -356,7 +369,18 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .expect("Failed to read input");
 
             // TODO: Allow for bigger memory reads than u8
-            let num_of_bytes_to_read: u8 = input.trim().parse().expect("Invalid input");
+            let num_of_bytes_to_read: u8 = match input.trim().parse() {
+                Ok(num) => num,
+                Err(_) => {
+                    eprintln!("Invalid input!");
+                    return;
+                }
+            };
+
+            if num_of_bytes_to_read > 254 {
+                eprintln!("Currently unable to read more than 254 bytes at a time!");
+                return;
+            }
 
             data_buffer[2] = u32_to_u8(base_address, 1);
             data_buffer[3] = u32_to_u8(base_address, 2);
