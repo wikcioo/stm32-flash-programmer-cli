@@ -53,10 +53,16 @@ const CMD_BL_GET_RW_PROTECT: BootloaderCommand = BootloaderCommand {
 };
 
 fn main() {
+    start_program();
+}
+
+fn start_program() {
+    display_program_name();
+
     let serial_devices = get_available_serial_ports();
 
     if serial_devices.is_empty() {
-        println!("No available serial devices!");
+        eprintln!("No available serial devices!");
         exit(0);
     }
 
@@ -65,26 +71,42 @@ fn main() {
         println!("{index}: {name}");
     }
 
-    println!("Enter the serial port name of your device: ");
+    let mut port;
+    print!("Choose your device from the list: ");
+    io::stdout().flush().unwrap();
 
-    let mut serial_port_name = String::new();
-    io::stdin().read_line(&mut serial_port_name).unwrap();
-    let serial_port_name = serial_port_name.trim().to_string();
+    loop {
+        let mut serial_port_name = String::new();
+        io::stdin().read_line(&mut serial_port_name).unwrap();
+        let serial_port_name = serial_port_name.trim().to_string();
 
-    if serial_devices.contains(&serial_port_name) {
-        println!("Your device is {serial_port_name}");
-    } else {
-        println!("Bad device");
+        if !serial_devices.contains(&serial_port_name) {
+            eprintln!("'{serial_port_name}' not found in the list of available ports");
+            print!("Try again: ");
+            io::stdout().flush().unwrap();
+            continue;
+        }
+
+        let serial_port_name = serial_port_name.trim().to_string();
+
+        port = match serialport::new(&serial_port_name, 115200).open()
+        {
+            Ok(p) => p,
+            Err(error) => {
+                eprintln!("Failed to open {serial_port_name}: {}", error.description);
+                print!("Try again: ");
+                io::stdout().flush().unwrap();
+                continue;
+            }
+        };
+
+        break;
     }
-    println!();
 
-    let mut port = serialport::new(serial_port_name, 115200)
-        .open()
-        .expect("Failed to open {serial_port_name}");
     port.set_timeout(std::time::Duration::from_secs(2)).unwrap();
     port.clear(ClearBuffer::Input).unwrap();
 
-    display_program_name();
+    println!();
     display_available_commands();
     loop {
         let cmd = choose_command();
