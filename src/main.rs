@@ -2,6 +2,7 @@ use regex::Regex;
 use serialport::{available_ports, ClearBuffer, SerialPort};
 use std::fs::read;
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::exit;
 
 struct BootloaderCommand {
@@ -114,6 +115,10 @@ fn start_program() {
 
 fn u32_to_u8(number: u32, index: u32) -> u8 {
     (number >> (8 * (index - 1)) & 0xFF) as u8
+}
+
+fn is_flash_mem_address(addr: &u32) -> bool {
+    (0x08000000..=0x0807FFFF).contains(addr)
 }
 
 fn get_crc(buff: &[u8]) -> u32 {
@@ -265,6 +270,11 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
 
             let filename = input.trim();
 
+            if !Path::new(filename).exists() {
+                eprintln!("File '{filename}' does not exist!");
+                return;
+            }
+
             let mut input = String::new();
             print!("Enter memory address at which to start writing: ");
             io::stdout().flush().unwrap();
@@ -272,8 +282,21 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let input = input.trim().trim_start_matches("0x");
-            let base_address = u32::from_str_radix(input, 16).expect("Invalid hex number");
+            let input_lowercase = input.to_lowercase();
+            let input = input_lowercase.trim().trim_start_matches("0x");
+
+            let base_address = match u32::from_str_radix(input, 16) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    eprintln!("Invalid hex number!");
+                    return;
+                }
+            };
+
+            if !is_flash_mem_address(&base_address) {
+                eprintln!("Memory address outside of FLASH memory bounds!");
+                return;
+            }
 
             let mut bytes: Vec<u8> = read(filename).unwrap();
 
