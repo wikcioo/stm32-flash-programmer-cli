@@ -109,7 +109,9 @@ fn start_program() {
     loop {
         let cmd = choose_command();
         parse_command(&cmd, port.as_mut());
-        port.clear(ClearBuffer::Input).unwrap();
+        if let Err(error) = port.clear(ClearBuffer::Input) {
+            eprintln!("Failed to clear the input buffer! {}", error.description);
+        }
     }
 }
 
@@ -137,7 +139,7 @@ fn get_crc(buff: &[u8]) -> u32 {
     crc
 }
 
-fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) {
+fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) -> Option<std::io::Error> {
     let cmd_len = data[0];
     let mut crc_buffer = [0u8; 4];
     // calculate crc on bytes [0 to CMD_BL_X_LEN - 4)
@@ -154,8 +156,15 @@ fn calc_checksum_and_send(data: &mut [u8], port: &mut dyn SerialPort) {
     // append crc_buffer to data
     let data = [&data[0..(cmd_len - 4) as usize], &crc_buffer[..]].concat();
 
-    port.write_all(&data[0..1]).unwrap();
-    port.write_all(&data[1..((cmd_len) as usize)]).unwrap();
+    if let Err(error) = port.write_all(&data[0..1]) {
+        return Some(error);
+    }
+
+    if let Err(error) = port.write_all(&data[1..((cmd_len) as usize)]) {
+        return Some(error);
+    }
+
+    None
 }
 
 fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
@@ -325,8 +334,12 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
 
                 bytes = bytes[no_bytes_to_be_send as usize..].to_vec();
 
-                calc_checksum_and_send(&mut data_buffer, port);
-                process_bootloader_reply(data_buffer[1], port);
+                if let Some(error) = calc_checksum_and_send(&mut data_buffer, port) {
+                    eprintln!("Critical error: '{}'\nExiting...", error.kind());
+                    exit(1);
+                } else if !process_bootloader_reply(data_buffer[1], port) {
+                    return;
+                }
 
                 no_bytes_sent += no_bytes_to_be_send as u32;
                 no_bytes_left_to_read -= no_bytes_to_be_send as usize;
@@ -469,13 +482,21 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
         }
     }
 
-    calc_checksum_and_send(&mut data_buffer, port);
-    process_bootloader_reply(data_buffer[1], port);
+    if let Some(error) = calc_checksum_and_send(&mut data_buffer, port) {
+        eprintln!("Critical error: '{}'\nExiting...", error.kind());
+        exit(1);
+    } else {
+        process_bootloader_reply(data_buffer[1], port);
+    }
 }
 
-fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
+fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) -> bool {
     let mut rcv_buffer = vec![0u8; 2];
-    port.read_exact(&mut rcv_buffer).unwrap();
+    if let Err(error) = port.read_exact(&mut rcv_buffer) {
+        eprintln!("Failed to read the bootloader reply: {error}");
+        println!("Make sure the device is in bootloader mode.");
+        return false;
+    }
 
     if rcv_buffer[0] == 0xBB {
         let reply_length = rcv_buffer[1] as usize;
@@ -507,6 +528,8 @@ fn process_bootloader_reply(command: u8, port: &mut dyn SerialPort) {
     } else {
         println!("Unknown reply!");
     }
+
+    true
 }
 
 fn process_cmd_bl_get_ver(length: usize, port: &mut dyn SerialPort) {
