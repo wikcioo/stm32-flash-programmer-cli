@@ -402,16 +402,31 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let sector_numbers: Vec<&str> = input.trim().split(' ').collect();
-            let sector_numbers: Vec<u8> =
-                sector_numbers.iter().map(|x| x.parse().unwrap()).collect();
+            let sector_numbers_str: Vec<&str> = input.trim().split(' ').collect();
+
+            let mut sector_numbers: Vec<u8> = vec![];
+
+            for number in sector_numbers_str {
+                let x = match number.parse() {
+                    Ok(val) => {
+                        if val > 7 {
+                            eprintln!("Encountered invalid sector number! Aborting...");
+                            return;
+                        }
+                        val
+                    }
+                    Err(_) => {
+                        eprintln!("Encountered invalid sector number! Aborting...");
+                        return;
+                    }
+                };
+
+                sector_numbers.push(x);
+            }
+
             let mut sectors = 0u8;
 
             for num in sector_numbers {
-                if num > 7 {
-                    println!("Incorrect sector values!");
-                    return;
-                }
                 sectors |= 1 << (num);
             }
 
@@ -422,7 +437,13 @@ fn parse_command(cmd: &str, port: &mut dyn SerialPort) {
                 .read_line(&mut input)
                 .expect("Failed to read input");
 
-            let prot_level = input.trim().parse().expect("Invalid input");
+            let prot_level = match input.trim().parse() {
+                Ok(val) => val,
+                Err(_) => {
+                    eprintln!("Invalid input!");
+                    return;
+                }
+            };
 
             if !(1..=2).contains(&prot_level) {
                 println!("Incorrect protection level value!");
